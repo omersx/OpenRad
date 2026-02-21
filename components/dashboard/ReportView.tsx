@@ -1,0 +1,430 @@
+import * as React from "react";
+import { ReportData } from "@/types";
+import { Card, CardContent } from "@/components/ui/basic";
+import { Download, Printer, Edit, XCircle, CheckCircle, FileText, Share2 } from "lucide-react";
+import { Button } from "@/components/ui/basic";
+import { CollaborationPanel } from "@/components/dashboard/CollaborationPanel";
+import { FullReportOverlay } from "@/components/dashboard/FullReportOverlay";
+import { RejectionModal } from "@/components/dashboard/RejectionModal";
+import { ApprovalModal } from "@/components/dashboard/ApprovalModal";
+import { ReportEditor } from "@/components/dashboard/ReportEditor";
+import { Comment, AuditLog } from "@/types";
+import { updateReportData, updateReportStatus } from "@/lib/api";
+import { StandardTemplate, PdfStandardTemplate } from "@/components/dashboard/ReportTemplates";
+
+interface ReportViewProps {
+    report: ReportData;
+    onNewPatient: () => void;
+    reportId?: string;
+    imagePreview?: string | null;
+}
+
+export function ReportView({ report, onNewPatient, reportId, imagePreview }: ReportViewProps) {
+    const [currentUser, setCurrentUser] = React.useState({ name: "Dr. User", role: "Doctor" });
+
+    React.useEffect(() => {
+        // Load current user from profile
+        if (typeof window !== 'undefined') {
+            const savedProfile = localStorage.getItem("openrad_profile");
+            if (savedProfile) {
+                const profile = JSON.parse(savedProfile);
+                setCurrentUser({
+                    name: profile.fullName || "Dr. User",
+                    role: profile.role || "Doctor"
+                });
+            }
+        }
+    }, []);
+
+    const handleAddComment = async (text: string) => {
+        if (!reportId) return;
+
+        const newComment: Comment = {
+            id: Date.now().toString(),
+            author: currentUser.name,
+            role: currentUser.role,
+            text,
+            timestamp: new Date().toISOString()
+        };
+
+        const updatedComments = [...(report.collaboration?.comments || []), newComment];
+        const updatedLogs = [...(report.collaboration?.logs || []), {
+            id: Date.now().toString() + "_log",
+            action: "Comment Added",
+            user: currentUser.name,
+            timestamp: new Date().toISOString(),
+            details: text.substring(0, 50) + (text.length > 50 ? "..." : "")
+        } as AuditLog];
+
+        await updateReportData(reportId, {
+            collaboration: {
+                comments: updatedComments,
+                logs: updatedLogs
+            }
+        });
+
+        // Optimistically update local state
+        report.collaboration = { comments: updatedComments, logs: updatedLogs };
+    };
+
+    const handleUnreject = async () => {
+        if (!reportId) return;
+
+        const success = await updateReportStatus(reportId, 'Pending');
+        if (success) {
+            // Update local state and logs (simplified for brevity, ideally use a context or refetch)
+            report.report_footer.report_status = 'Pending';
+            window.location.reload();
+        }
+    };
+
+    const handlePrint = () => window.print();
+
+    const handleDownloadPDF = async () => {
+        // Use the Clean Slate PDF generator which creates a fresh HTML structure
+        // This bypasses any UI state or visibility issues with the React components.
+
+        const filename = `${report.patient.name.replace(/\s+/g, '_')}_Report.pdf`;
+
+        // Determine template preference
+        let template: 'standard' | 'modern' | 'minimal' = 'standard';
+        try {
+            const savedConfig = localStorage.getItem("openrad_appearance");
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                if (config.reportTemplate) {
+                    template = config.reportTemplate;
+                }
+            }
+        } catch (e) {
+            console.error("Error reading template preference", e);
+        }
+
+        const { generatePDF } = await import('@/lib/pdfHelper');
+        await generatePDF(report, filename, template);
+    };
+    // Prefer the full report template (overlay) if visible, otherwise dashboard
+    const urgencyColor = report.urgency === 'Critical' ? 'text-red-600' :
+        report.urgency === 'Urgent' ? 'text-orange-600' : 'text-green-600';
+
+    const statusColor = report.report_footer.report_status === 'Approved' ? 'bg-green-100 text-green-800' :
+        report.report_footer.report_status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
+
+
+
+    // ... imports
+
+    const [isFullReport, setIsFullReport] = React.useState(false);
+    const [isRejectModalOpen, setIsRejectModalOpen] = React.useState(false);
+    const [isApproveModalOpen, setIsApproveModalOpen] = React.useState(false);
+    const [isEditing, setIsEditing] = React.useState(false);
+
+    const handleSaveReport = async (updatedReport: ReportData) => {
+        if (!reportId) return;
+
+        // Optimistic update locally
+        Object.assign(report, updatedReport);
+        setIsEditing(false);
+
+        // Update backend
+        await updateReportData(reportId, {
+            findings: updatedReport.findings,
+            impression: updatedReport.impression,
+            recommendations: updatedReport.recommendations,
+            urgency: updatedReport.urgency
+        });
+
+        // Reload to ensure consistency (optional, but good for safety)
+        window.location.reload();
+    };
+
+    const handleRejectConfirm = async (reason: string, comment: string) => {
+        if (!reportId) return;
+        const success = await updateReportStatus(reportId, 'Rejected', { rejectionReason: reason, notes: comment });
+        if (success) {
+            report.report_footer.report_status = 'Rejected';
+            setIsRejectModalOpen(false);
+            window.location.reload(); // Ensuring full refresh of state
+        }
+    };
+
+    const handleApproveConfirm = async (signature: string, comment: string) => {
+        if (!reportId) return;
+        const success = await updateReportStatus(reportId, 'Approved', { signature, notes: comment });
+        if (success) {
+            report.report_footer.report_status = 'Approved';
+            setIsApproveModalOpen(false);
+            window.location.reload();
+        }
+    };
+
+    return (
+        <div className="h-full relative">
+            <RejectionModal
+                isOpen={isRejectModalOpen}
+                onClose={() => setIsRejectModalOpen(false)}
+                onConfirm={handleRejectConfirm}
+            />
+            <ApprovalModal
+                isOpen={isApproveModalOpen}
+                onClose={() => setIsApproveModalOpen(false)}
+                onConfirm={handleApproveConfirm}
+                currentUser={currentUser}
+            />
+
+            {isFullReport && (
+                <FullReportOverlay
+                    report={report}
+                    reportId={reportId}
+                    imageSrc={imagePreview}
+                    onClose={() => setIsFullReport(false)}
+                    onNewPatient={onNewPatient}
+                    onPrint={handlePrint}
+                    onDownloadPDF={handleDownloadPDF}
+                    onEdit={() => {
+                        setIsFullReport(false);
+                        setIsEditing(true);
+                    }}
+                    onReject={() => setIsRejectModalOpen(true)}
+                    onApprove={() => setIsApproveModalOpen(true)}
+                    onUnreject={handleUnreject}
+                    onAddComment={handleAddComment}
+                    currentUser={currentUser}
+                />
+            )}
+
+            {isEditing ? (
+                <div className="h-full bg-bg-surface rounded-xl shadow-sm border border-border-primary overflow-hidden">
+                    <ReportEditor
+                        report={report}
+                        onSave={handleSaveReport}
+                        onCancel={() => setIsEditing(false)}
+                    />
+                </div>
+            ) : (
+                <div className="h-full flex flex-col overflow-hidden bg-bg-surface rounded-xl shadow-sm border border-border-primary">
+                    <div className="flex flex-col border-b border-border-primary bg-bg-panel shrink-0">
+                        {/* Top Row: Patient Info */}
+                        <div className="p-4 pb-2 flex justify-between items-start">
+                            <div className="flex flex-col gap-1">
+                                <h1 className="text-2xl font-bold text-text-heading">{report.patient.name}</h1>
+                                <div className="flex items-center gap-2 text-sm text-text-muted">
+                                    <span>{report.study.modality}</span>
+                                    <span>•</span>
+                                    <span>{report.study.examination}</span>
+                                </div>
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${statusColor}`}>
+                                {report.report_footer.report_status}
+                            </div>
+                        </div>
+
+                        {/* Bottom Row: Action Toolbar */}
+                        <div className="px-4 pb-4 pt-2 flex items-center justify-between gap-4">
+                            {/* Left Group: View & Export */}
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant={isFullReport ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setIsFullReport(!isFullReport)}
+                                    className="transition-all hover:shadow-md active:scale-95 hover:bg-blue-50 text-blue-700 border-blue-200"
+                                >
+                                    {isFullReport ? "Exit Full View" : "Full Report"}
+                                </Button>
+                                <div className="h-6 w-px bg-border-primary mx-1" />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={handleDownloadPDF}
+                                    title="Download PDF"
+                                    className="w-8 h-8 transition-all hover:bg-gray-100 hover:text-blue-600 active:scale-95"
+                                >
+                                    <Download size={16} />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={handlePrint}
+                                    title="Print"
+                                    className="w-8 h-8 transition-all hover:bg-gray-100 hover:text-blue-600 active:scale-95"
+                                >
+                                    <Printer size={16} />
+                                </Button>
+                            </div>
+
+                            {/* Right Group: Workflow Actions */}
+                            <div className="flex items-center gap-2">
+                                {report.report_footer.report_status === 'Pending' && (
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                            onClick={() => setIsEditing(true)}
+                                        >
+                                            <Edit size={14} className="mr-1.5" /> Edit
+                                        </Button>
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() => setIsRejectModalOpen(true)}
+                                            className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                                        >
+                                            <XCircle size={14} className="mr-1.5" /> Reject
+                                        </Button>
+                                        <Button
+                                            variant="success"
+                                            size="sm"
+                                            onClick={() => setIsApproveModalOpen(true)}
+                                            className="bg-green-600 text-white hover:bg-green-700 hover:shadow-md border-transparent"
+                                        >
+                                            <CheckCircle size={14} className="mr-1.5" /> Approve
+                                        </Button>
+                                    </>
+                                )}
+
+                                {report.report_footer.report_status === 'Rejected' && (
+                                    <Button
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={handleUnreject}
+                                        className="bg-red-100 text-red-700 hover:bg-red-200 border-red-200"
+                                        title="Click to Unreject"
+                                    >
+                                        <XCircle size={14} className="mr-1.5" /> Unreject
+                                    </Button>
+                                )}
+
+                                {report.report_footer.report_status === 'Approved' && (
+                                    <Button
+                                        variant="success"
+                                        size="sm"
+                                        className="bg-green-100 text-green-800 border-green-200 cursor-default"
+                                    >
+                                        <CheckCircle size={14} className="mr-1.5" /> Approved
+                                    </Button>
+                                )}
+
+                                <div className="h-6 w-px bg-border-primary mx-1" />
+
+                                <Button variant="default" size="sm" onClick={onNewPatient} className="bg-blue-600 hover:bg-blue-700 shadow-sm active:scale-95">
+                                    New Patient
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Scrollable Report Content */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-8" id="report-container">
+
+                        {/* Findings */}
+                        <section>
+                            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3">Findings</h3>
+                            <div className="space-y-4">
+                                {report.findings.map((finding, idx) => {
+                                    const status = finding.status?.toLowerCase() || 'normal';
+
+                                    let badgeColor = 'bg-gray-100 text-gray-700 border-gray-200';
+                                    let statusLabel = 'NORMAL';
+
+                                    if (status === 'abnormal') {
+                                        badgeColor = 'bg-red-100 text-red-700 border-red-200';
+                                        statusLabel = 'ABNORMAL';
+                                    } else if (status === 'normal') {
+                                        badgeColor = 'bg-green-100 text-green-700 border-green-200';
+                                        statusLabel = 'NORMAL';
+                                    } else if (status === 'indeterminate') {
+                                        badgeColor = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                                        statusLabel = 'INDETERMINATE';
+                                    } else if (status === 'post_procedural' || status === 'post-procedural') {
+                                        badgeColor = 'bg-blue-100 text-blue-700 border-blue-200';
+                                        statusLabel = 'POST-PROCEDURAL';
+                                    }
+
+                                    return (
+                                        <div key={idx} className="pb-3 border-b border-border-primary/30 last:border-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-bold text-text-heading underline decoration-gray-300 underline-offset-4">
+                                                    {finding.anatomical_region}
+                                                </span>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded border font-bold uppercase tracking-wider ${badgeColor}`}>
+                                                    {statusLabel}
+                                                </span>
+                                            </div>
+                                            <p className="text-text-primary leading-relaxed">
+                                                {finding.observation}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        {/* Impression */}
+                        <section className="bg-blue-50/50 p-4 rounded-lg border border-blue-100/50">
+                            <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wider mb-2">Impression</h3>
+                            <div className="space-y-2">
+                                {report.impression.map((imp, idx) => (
+                                    <p key={idx} className="text-text-heading font-medium leading-relaxed">{imp}</p>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* Urgency Level - Moved here per request */}
+                        <div className="p-4 rounded-lg border border-border-primary bg-bg-panel/50">
+                            <span className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Urgency Level</span>
+                            <span className={`text-lg font-bold ${urgencyColor}`}>{report.urgency}</span>
+                        </div>
+
+                        {/* Recommendations */}
+                        {report.recommendations && report.recommendations.length > 0 && (
+                            <section>
+                                <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-2">Recommendations</h3>
+                                <ul className="list-disc list-inside space-y-1 text-text-primary">
+                                    {report.recommendations.map((rec, idx) => (
+                                        <li key={idx}>{rec}</li>
+                                    ))}
+                                </ul>
+                            </section>
+                        )}
+
+                        {/* Footer Info */}
+                        <div className="pt-8 border-t border-border-primary text-sm text-text-muted grid grid-cols-2 gap-4">
+                            <div className="text-left">
+                                <p>Prepared by: {report.report_footer.prepared_by}</p>
+                                <p>{new Date(report.report_header.report_date).toLocaleDateString()}</p>
+                                {report.report_footer.report_status === 'Rejected' && report.report_footer.rejection_reason && (
+                                    <div className="mt-2 text-red-600 font-medium">
+                                        Rejection Reason: {report.report_footer.rejection_reason}
+                                    </div>
+                                )}
+                            </div>
+                            {/* Approval Sig in Footer */}
+                            {report.report_footer.report_status === 'Approved' && report.report_footer.approved_by && (
+                                <div className="text-right">
+                                    <p className="text-xs uppercase font-bold mb-2">Electronically Signed By</p>
+                                    <p className="font-bold text-lg">{report.report_footer.approved_by}</p>
+                                    {report.report_footer.signature && (
+                                        <img src={report.report_footer.signature} alt="Signature" className="h-12 ml-auto opacity-80 mt-1 dark:invert" />
+                                    )}
+                                    <p className="text-xs mt-1">{new Date(report.report_footer.approved_at || "").toLocaleString()}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Collaboration (Included at bottom for utility) */}
+                        <div className="pt-8 border-t border-border-primary">
+                            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-4">Collaboration & Logs</h3>
+                            <CollaborationPanel
+                                comments={report.collaboration?.comments || []}
+                                logs={report.collaboration?.logs || []}
+                                onAddComment={handleAddComment}
+                                currentUser={currentUser}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
