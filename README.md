@@ -46,10 +46,11 @@ OpenRad is a modern, responsive web application designed for radiologists and me
 ## 📖 How to Use
 
 1. **Configure Your Settings**: First, navigate to the **Settings** tab. Add your n8n Webhook URL (for the AI backend) and optionally your Supabase credentials for cloud syncing. You can also personalize your hospital branding and toggle dark/light mode here.
-2. **Generate a Report**: Navigate to the **Dashboard**. Enter the patient's information (Name, Age, Gender), add the "Indication" for the scan, select the correct modality, and upload the image. Click "Generate Report".
-3. **Analyze**: Wait a few seconds for the AI to return the draft. Review the detected findings, impression, and recommendations.
-4. **Approve/Edit**: Read through the report. If anything needs adjusting, click the **Edit** button to make quick changes textually. Once satisfied, hit **Approve**.
-5. **Download**: Click the **Download PDF** button to export the final result securely matching your chosen Template design.
+   use this OprnRad n8n workflow  :[link text](https://drive.google.com/file/d/19g1QKiyQ4BaX-QcoRtYEeJP61GGEHqf_/view?usp=sharing)
+3. **Generate a Report**: Navigate to the **Dashboard**. Enter the patient's information (Name, Age, Gender), add the "Indication" for the scan, select the correct modality, and upload the image. Click "Generate Report".
+4. **Analyze**: Wait a few seconds for the AI to return the draft. Review the detected findings, impression, and recommendations.
+5. **Approve/Edit**: Read through the report. If anything needs adjusting, click the **Edit** button to make quick changes textually. Once satisfied, hit **Approve**.
+6. **Download**: Click the **Download PDF** button to export the final result securely matching your chosen Template design.
 
 ## ⚙️ Getting Started
 
