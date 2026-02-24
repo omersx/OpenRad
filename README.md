@@ -6,7 +6,7 @@ OpenRad is a modern, responsive web application designed for radiologists and me
 <img width="1920" height="848" alt="view-summary" src="https://github.com/user-attachments/assets/9eb9f1ca-fe2f-4bff-90ff-20f8026e9c02" />
 
 
-<img width="1920" height="848" alt="Screenshot (687)" src="https://github.com/user-attachments/assets/866ef51d-0d78-4582-b755-a61c43f4418f" />
+
 
 
 <img width="1920" height="854" alt="reports" src="https://github.com/user-attachments/assets/ad066ccf-a530-47bf-8f15-80cbf91e3aa0" />
