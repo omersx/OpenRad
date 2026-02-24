@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Label, Badge } from "@/components/ui/basic"
-import { Trash2, UserPlus, Shield, User, Activity } from "lucide-react"
+import { Trash2, UserPlus, User } from "lucide-react"
 
 interface User {
     id: string;
@@ -150,7 +150,7 @@ export function UserManagementPanel() {
                                             className="text-red-500 hover:text-red-400 hover:bg-red-950/20"
                                             onClick={() => handleRemoveUser(user.id)}
                                         >
-                                            <Trash2 size={14} /> // No text, just icon for compactness
+                                            <Trash2 size={14} /> {/* No text, just icon for compactness */}
                                         </Button>
                                     </td>
                                 </tr>

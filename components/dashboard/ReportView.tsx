@@ -17,9 +17,10 @@ interface ReportViewProps {
     onNewPatient: () => void;
     reportId?: string;
     imagePreview?: string | null;
+    onStatusChange?: () => void;
 }
 
-export function ReportView({ report, onNewPatient, reportId, imagePreview }: ReportViewProps) {
+export function ReportView({ report, onNewPatient, reportId, imagePreview, onStatusChange }: ReportViewProps) {
     const [currentUser, setCurrentUser] = React.useState({ name: "Dr. User", role: "Doctor" });
 
     React.useEffect(() => {
@@ -65,6 +66,9 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview }: Rep
 
         // Optimistically update local state
         report.collaboration = { comments: updatedComments, logs: updatedLogs };
+
+        // Notify parent
+        if (onStatusChange) onStatusChange();
     };
 
     const handleUnreject = async () => {
@@ -74,7 +78,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview }: Rep
         if (success) {
             // Update local state and logs (simplified for brevity, ideally use a context or refetch)
             report.report_footer.report_status = 'Pending';
-            window.location.reload();
+            if (onStatusChange) onStatusChange();
         }
     };
 
@@ -134,8 +138,8 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview }: Rep
             urgency: updatedReport.urgency
         });
 
-        // Reload to ensure consistency (optional, but good for safety)
-        window.location.reload();
+        // Reload or update callback
+        if (onStatusChange) onStatusChange();
     };
 
     const handleRejectConfirm = async (reason: string, comment: string) => {
@@ -144,7 +148,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview }: Rep
         if (success) {
             report.report_footer.report_status = 'Rejected';
             setIsRejectModalOpen(false);
-            window.location.reload(); // Ensuring full refresh of state
+            if (onStatusChange) onStatusChange();
         }
     };
 
@@ -154,7 +158,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview }: Rep
         if (success) {
             report.report_footer.report_status = 'Approved';
             setIsApproveModalOpen(false);
-            window.location.reload();
+            if (onStatusChange) onStatusChange();
         }
     };
 

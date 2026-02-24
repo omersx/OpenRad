@@ -53,31 +53,55 @@ export async function generateReport(data: PatientContext): Promise<ReportData[]
     }
 
     try {
-        // Convert image to base64 if provided
+        // Build multipart/form-data so the image arrives in n8n as binary data
+        const formData = new FormData();
+
+        // Patient fields
+        formData.append("patient_name", data.fullName);
+        formData.append("patient_age", String(data.age));
+        formData.append("patient_gender", data.gender);
+
+        // Clinical information fields
+        formData.append("symptoms", data.symptoms);
+        formData.append("history", data.history);
+        formData.append("indication", data.indication);
+
+        // Study fields
+        formData.append("modality", data.modality);
+
+        // We also keep a base64 copy for local storage / report preview
         let imageBase64: string | null = null;
+
+        // Append image as binary file under the key "image"
         if (data.image) {
+            const file = data.image as File;
+            formData.append("image", file, file.name);
+
+            // Also generate base64 for local report preview/history
             imageBase64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(reader.result as string);
                 reader.onerror = reject;
-                reader.readAsDataURL(data.image as File);
+                reader.readAsDataURL(file);
             });
         }
 
-        const payload = {
-            patient: { name: data.fullName, age: data.age, gender: data.gender },
-            clinical_information: { symptoms: data.symptoms, history: data.history, indication: data.indication },
-            study: { modality: data.modality },
-            image: imageBase64, // Include base64 image
-        };
-
         console.log("[OpenRad] Sending request to webhook:", webhookUrl);
-        console.log("[OpenRad] Payload (without image):", { ...payload, image: imageBase64 ? '[base64 image data]' : null });
+        console.log("[OpenRad] Payload fields:", {
+            patient_name: data.fullName,
+            patient_age: data.age,
+            patient_gender: data.gender,
+            symptoms: data.symptoms,
+            history: data.history,
+            indication: data.indication,
+            modality: data.modality,
+            image: data.image ? `[binary file: ${(data.image as File).name}, ${(data.image as File).size} bytes]` : null,
+        });
 
+        // Send as multipart/form-data (do NOT set Content-Type header — the browser sets it automatically with the boundary)
         const response = await fetch(webhookUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: formData,
         });
 
         console.log("[OpenRad] Webhook response status:", response.status, response.statusText);
@@ -283,8 +307,20 @@ export async function getReports() {
     }
 
     // 3. Merge both sources (Supabase reports first, then local-only reports)
-    const allReports = [...supabaseReports, ...localReports];
-    console.log(`Loaded ${supabaseReports.length} from Supabase, ${localReports.length} from localStorage`);
+    // We must deduplicate because saveReport saves to BOTH places.
+    // We prefer the Supabase version over the localStorage version if both exist.
+    const allReports = [...supabaseReports];
+    const existingIds = new Set(allReports.map(r => r.report_data?.report_header?.report_id || r.id));
+
+    for (const local of localReports) {
+        const localId = local.report_data?.report_header?.report_id || local.id;
+        if (!existingIds.has(localId)) {
+            allReports.push(local);
+            existingIds.add(localId); // Just in case of duplicates within local
+        }
+    }
+
+    console.log(`Loaded ${supabaseReports.length} from Supabase, ${localReports.length} from localStorage. Total deduplicated: ${allReports.length}`);
 
     return allReports;
 }
@@ -438,7 +474,13 @@ export async function updateReportStatus(
         const localReportsStr = localStorage.getItem("openrad_reports");
         if (localReportsStr) {
             const localReports = JSON.parse(localReportsStr);
-            const index = localReports.findIndex((r: any) => r.report_data?.report_header?.report_id === id || r.id === id);
+            const reportIdToMatch = updatedData?.report_header?.report_id || id;
+
+            const index = localReports.findIndex((r: any) =>
+                r.report_data?.report_header?.report_id === id ||
+                r.id === id ||
+                (reportIdToMatch && r.report_data?.report_header?.report_id === reportIdToMatch)
+            );
 
             if (index !== -1) {
                 // Update the deep property

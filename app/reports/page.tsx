@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { getReports, updateReportStatus, clearAllReports } from "@/lib/api";
+import { updateReportStatus } from "@/lib/api";
 import { ReportData, ReportStatus } from "@/types";
-import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui/basic";
+import { Card, CardContent, Button } from "@/components/ui/basic";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Eye, Check, X, Clock, RefreshCw, Trash2, Calendar } from "lucide-react";
+import { Eye, Check, X, Clock, RefreshCw, Trash2, Calendar } from "lucide-react";
 import { ReportView } from "@/components/dashboard/ReportView";
 import { ImageViewer } from "@/components/dashboard/ImageViewer";
 
@@ -48,16 +48,30 @@ export default function ReportsPage() {
 
     const loadReports = async () => {
         setLoading(true);
-        const data = await getReports();
-        // Sorting happens at the column level now
-        console.log("Reports loaded:", data?.length || 0, "reports");
-        setReports(data || []);
+        try {
+            const dataStr = localStorage.getItem("openrad_reports");
+            const data = dataStr ? JSON.parse(dataStr) : [];
+            console.log("Local Reports loaded:", data?.length || 0, "reports");
+            setReports(data || []);
+        } catch (e) {
+            console.error("Error parsing local reports", e);
+            setReports([]);
+        }
         setLoading(false);
     };
 
     React.useEffect(() => {
         loadReports();
     }, []);
+
+    React.useEffect(() => {
+        if (selectedReport && reports.length > 0) {
+            const fresh = reports.find(r => r.id === selectedReport.id);
+            if (fresh && fresh.report_data && JSON.stringify(fresh.report_data) !== JSON.stringify(selectedReport.data)) {
+                setSelectedReport({ data: fresh.report_data, id: fresh.id });
+            }
+        }
+    }, [reports]);
 
     const openApproval = (id: string, name: string) => {
         setActionReport({ id, name });
@@ -94,11 +108,8 @@ export default function ReportsPage() {
     };
 
     const handleClearAll = async () => {
-        if (confirm("Are you sure you want to delete ALL reports? This will clear Pending, Approved, and Rejected columns permanently.")) {
-            setLoading(true);
-            await clearAllReports();
-            await loadReports();
-            setLoading(false);
+        if (confirm("Are you sure you want to clear the board? This will hide the reports from this view but keep them in your history.")) {
+            setReports([]);
         }
     };
 
@@ -156,6 +167,7 @@ export default function ReportsPage() {
                             report={reportData}
                             onNewPatient={() => setSelectedReport(null)}
                             reportId={selectedReport.id}
+                            onStatusChange={loadReports}
                         />
                     </div>
                 </div>

@@ -11,7 +11,7 @@ import { ReportView } from "@/components/dashboard/ReportView";
 export default function HistoryPage() {
     const [reports, setReports] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
-    const [selectedReport, setSelectedReport] = React.useState<ReportData | null>(null);
+    const [selectedReportId, setSelectedReportId] = React.useState<string | null>(null);
     const [searchQuery, setSearchQuery] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState<string>("All");
     // Default to Supabase now that it's connected, remove "Both"
@@ -89,17 +89,20 @@ export default function HistoryPage() {
         return matchesSearch && matchesStatus;
     });
 
-    if (selectedReport) {
+    const selectedReportObj = reports.find(r => r.id === selectedReportId);
+
+    if (selectedReportObj) {
         return (
             <div className="h-full flex flex-col p-4 bg-bg-primary overflow-hidden">
-                <Button variant="ghost" onClick={() => setSelectedReport(null)} className="mb-2 self-start gap-2 text-text-secondary hover:text-text-primary">
+                <Button variant="ghost" onClick={() => setSelectedReportId(null)} className="mb-2 self-start gap-2 text-text-secondary hover:text-text-primary">
                     ← Back to History
                 </Button>
                 <div className="flex-1 overflow-hidden rounded-xl border border-border-primary bg-bg-surface shadow-sm">
                     <ReportView
-                        report={selectedReport}
-                        onNewPatient={() => setSelectedReport(null)}
-                        reportId={reports.find(r => r.report_data === selectedReport)?.id}
+                        report={selectedReportObj.report_data}
+                        onNewPatient={() => setSelectedReportId(null)}
+                        reportId={selectedReportObj.id}
+                        onStatusChange={loadReports}
                     />
                 </div>
             </div>
@@ -202,7 +205,7 @@ export default function HistoryPage() {
                                 return (
                                     <div
                                         key={report.id}
-                                        onClick={() => setSelectedReport(reportData)}
+                                        onClick={() => setSelectedReportId(report.id)}
                                         className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-bg-panel/50 transition-colors cursor-pointer group"
                                     >
                                         {/* Patient Column (3) */}

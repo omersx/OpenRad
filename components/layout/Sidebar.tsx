@@ -1,7 +1,7 @@
 "use client"
 
 import Image from 'next/image';
-import { FileText, LayoutDashboard, Settings, User, Clock, Menu } from 'lucide-react';
+import { FileText, LayoutDashboard, Settings, User, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 

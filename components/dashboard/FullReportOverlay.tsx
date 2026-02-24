@@ -71,7 +71,15 @@ export function FullReportOverlay({
             text,
             timestamp: new Date().toISOString()
         };
+        const newLog: AuditLog = {
+            id: Date.now().toString() + "_log",
+            action: "Comment Added",
+            user: currentUser.name,
+            timestamp: new Date().toISOString(),
+            details: text.substring(0, 50) + (text.length > 50 ? "..." : "")
+        };
         setLocalComments(prev => [...prev, newComment]);
+        setLocalLogs(prev => [...prev, newLog]);
 
         // Call parent handler (which updates backend)
         onAddComment(text);
