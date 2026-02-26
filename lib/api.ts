@@ -310,10 +310,27 @@ export async function updateReportData(id: string, updates: Partial<ReportData>)
     // Skip Supabase for local-only reports
     if (!supabase || id.startsWith('local_')) return false;
 
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let supabaseRowId: string | null = isUUID ? id : null;
+
+    if (!supabaseRowId) {
+        const { data: found } = await supabase
+            .from('reports')
+            .select('id')
+            .filter('report_data->report_header->>report_id', 'eq', id)
+            .limit(1)
+            .single();
+        if (found) {
+            supabaseRowId = found.id;
+        } else {
+            return false;
+        }
+    }
+
     const { data: current, error: fetchError } = await supabase
         .from('reports')
         .select('report_data')
-        .eq('id', id)
+        .eq('id', supabaseRowId)
         .single();
 
     if (fetchError || !current) return false;
@@ -323,7 +340,7 @@ export async function updateReportData(id: string, updates: Partial<ReportData>)
     const { error } = await supabase
         .from('reports')
         .update({ report_data: updatedData })
-        .eq('id', id);
+        .eq('id', supabaseRowId);
 
     return !error;
 }
@@ -339,20 +356,47 @@ export async function updateReportStatus(
     let updatedData: any = null;
     let supabaseSuccess = false;
 
-    // Only attempt Supabase if we have a real UUID (not a local_ id)
+    // Classify the id:
+    // - 'local_XXXX'  → only in localStorage, skip Supabase entirely
+    // - valid UUID    → real Supabase row id, use directly
+    // - 'RAD-XXXX'   → report_header.report_id, need to look up the real Supabase UUID first
     const isLocalReport = id.startsWith('local_');
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    // This is the actual Supabase row UUID we will use for the update
+    let supabaseRowId: string | null = isUUID ? id : null;
 
     if (supabase && !isLocalReport) {
-        // 1. Fetch current report data to preserve other fields
-        const { data: current, error: fetchError } = await supabase
-            .from('reports')
-            .select('report_data')
-            .eq('id', id)
-            .single();
+        // If not a UUID (e.g. RAD-XXXX), look up the real row UUID via JSONB query
+        if (!supabaseRowId) {
+            console.log("[OpenRad] Looking up Supabase row by report_id:", id);
+            const { data: found, error: lookupError } = await supabase
+                .from('reports')
+                .select('id, report_data')
+                .filter('report_data->report_header->>report_id', 'eq', id)
+                .limit(1)
+                .single();
 
-        if (!fetchError && current) {
-            updatedData = { ...current.report_data };
-            supabaseSuccess = true;
+            if (!lookupError && found) {
+                supabaseRowId = found.id;
+                updatedData = { ...found.report_data };
+                supabaseSuccess = true;
+                console.log("[OpenRad] Found Supabase row UUID:", supabaseRowId);
+            } else {
+                console.warn("[OpenRad] Could not find Supabase row for report_id:", id, lookupError?.message);
+            }
+        } else {
+            // It's a real UUID — fetch the current report_data to preserve other fields
+            const { data: current, error: fetchError } = await supabase
+                .from('reports')
+                .select('report_data')
+                .eq('id', supabaseRowId)
+                .single();
+
+            if (!fetchError && current) {
+                updatedData = { ...current.report_data };
+                supabaseSuccess = true;
+            }
         }
     }
 
@@ -438,7 +482,7 @@ export async function updateReportStatus(
 
     // 2. Update the record in Supabase (if we have a client and a real UUID)
     let supabaseError = null;
-    if (supabase && !isLocalReport && updatedData) {
+    if (supabase && !isLocalReport && updatedData && supabaseRowId) {
         // Try update with top-level report_status column first
         const { error: err1 } = await supabase
             .from('reports')
@@ -446,7 +490,7 @@ export async function updateReportStatus(
                 report_data: updatedData,
                 report_status: status,
             })
-            .eq('id', id);
+            .eq('id', supabaseRowId);
 
         if (err1) {
             // Log full error details
@@ -462,7 +506,7 @@ export async function updateReportStatus(
             const { error: err2 } = await supabase
                 .from('reports')
                 .update({ report_data: updatedData })
-                .eq('id', id);
+                .eq('id', supabaseRowId);
 
             supabaseError = err2;
             if (err2) {
