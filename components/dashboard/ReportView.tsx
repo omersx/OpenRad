@@ -23,6 +23,14 @@ interface ReportViewProps {
 export function ReportView({ report, onNewPatient, reportId, imagePreview, onStatusChange }: ReportViewProps) {
     const [currentUser, setCurrentUser] = React.useState({ name: "Dr. User", role: "Doctor" });
 
+    // Local state for the report footer so UI re-renders immediately on approve/reject
+    const [footer, setFooter] = React.useState({ ...report.report_footer });
+
+    // Keep footer in sync if a new report is passed in
+    React.useEffect(() => {
+        setFooter({ ...report.report_footer });
+    }, [report]);
+
     React.useEffect(() => {
         // Load current user from profile
         if (typeof window !== 'undefined') {
@@ -76,8 +84,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
 
         const success = await updateReportStatus(reportId, 'Pending');
         if (success) {
-            // Update local state and logs (simplified for brevity, ideally use a context or refetch)
-            report.report_footer.report_status = 'Pending';
+            setFooter(prev => ({ ...prev, report_status: 'Pending', rejection_reason: undefined }));
             if (onStatusChange) onStatusChange();
         }
     };
@@ -107,12 +114,12 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
         const { generatePDF } = await import('@/lib/pdfHelper');
         await generatePDF(report, filename, template);
     };
-    // Prefer the full report template (overlay) if visible, otherwise dashboard
     const urgencyColor = report.urgency === 'Critical' ? 'text-red-600' :
         report.urgency === 'Urgent' ? 'text-orange-600' : 'text-green-600';
 
-    const statusColor = report.report_footer.report_status === 'Approved' ? 'bg-green-100 text-green-800' :
-        report.report_footer.report_status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
+    // Use local footer state for all status-driven UI
+    const statusColor = footer.report_status === 'Approved' ? 'bg-green-100 text-green-800' :
+        footer.report_status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
 
 
 
@@ -146,7 +153,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
         if (!reportId) return;
         const success = await updateReportStatus(reportId, 'Rejected', { rejectionReason: reason, notes: comment });
         if (success) {
-            report.report_footer.report_status = 'Rejected';
+            setFooter(prev => ({ ...prev, report_status: 'Rejected', rejection_reason: reason }));
             setIsRejectModalOpen(false);
             if (onStatusChange) onStatusChange();
         }
@@ -156,7 +163,13 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
         if (!reportId) return;
         const success = await updateReportStatus(reportId, 'Approved', { signature, notes: comment });
         if (success) {
-            report.report_footer.report_status = 'Approved';
+            setFooter(prev => ({
+                ...prev,
+                report_status: 'Approved',
+                signature,
+                approved_by: currentUser.name,
+                approved_at: new Date().toISOString(),
+            }));
             setIsApproveModalOpen(false);
             if (onStatusChange) onStatusChange();
         }
@@ -219,7 +232,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
                                 </div>
                             </div>
                             <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${statusColor}`}>
-                                {report.report_footer.report_status}
+                                {footer.report_status}
                             </div>
                         </div>
 
@@ -258,7 +271,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
 
                             {/* Right Group: Workflow Actions */}
                             <div className="flex items-center gap-2">
-                                {report.report_footer.report_status === 'Pending' && (
+                                {footer.report_status === 'Pending' && (
                                     <>
                                         <Button
                                             variant="outline"
@@ -287,7 +300,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
                                     </>
                                 )}
 
-                                {report.report_footer.report_status === 'Rejected' && (
+                                {footer.report_status === 'Rejected' && (
                                     <Button
                                         variant="danger"
                                         size="sm"
@@ -299,7 +312,7 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
                                     </Button>
                                 )}
 
-                                {report.report_footer.report_status === 'Approved' && (
+                                {footer.report_status === 'Approved' && (
                                     <Button
                                         variant="success"
                                         size="sm"
@@ -395,23 +408,23 @@ export function ReportView({ report, onNewPatient, reportId, imagePreview, onSta
                         {/* Footer Info */}
                         <div className="pt-8 border-t border-border-primary text-sm text-text-muted grid grid-cols-2 gap-4">
                             <div className="text-left">
-                                <p>Prepared by: {report.report_footer.prepared_by}</p>
+                                <p>Prepared by: {footer.prepared_by}</p>
                                 <p>{new Date(report.report_header.report_date).toLocaleDateString()}</p>
-                                {report.report_footer.report_status === 'Rejected' && report.report_footer.rejection_reason && (
+                                {footer.report_status === 'Rejected' && footer.rejection_reason && (
                                     <div className="mt-2 text-red-600 font-medium">
-                                        Rejection Reason: {report.report_footer.rejection_reason}
+                                        Rejection Reason: {footer.rejection_reason}
                                     </div>
                                 )}
                             </div>
                             {/* Approval Sig in Footer */}
-                            {report.report_footer.report_status === 'Approved' && report.report_footer.approved_by && (
+                            {footer.report_status === 'Approved' && footer.approved_by && (
                                 <div className="text-right">
                                     <p className="text-xs uppercase font-bold mb-2">Electronically Signed By</p>
-                                    <p className="font-bold text-lg">{report.report_footer.approved_by}</p>
-                                    {report.report_footer.signature && (
-                                        <img src={report.report_footer.signature} alt="Signature" className="h-12 ml-auto opacity-80 mt-1 dark:invert" />
+                                    <p className="font-bold text-lg">{footer.approved_by}</p>
+                                    {footer.signature && (
+                                        <img src={footer.signature} alt="Signature" className="h-12 ml-auto opacity-80 mt-1 dark:invert" />
                                     )}
-                                    <p className="text-xs mt-1">{new Date(report.report_footer.approved_at || "").toLocaleString()}</p>
+                                    <p className="text-xs mt-1">{new Date(footer.approved_at || "").toLocaleString()}</p>
                                 </div>
                             )}
                         </div>
