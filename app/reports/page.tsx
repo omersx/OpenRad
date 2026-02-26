@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { updateReportStatus } from "@/lib/api";
+import { updateReportStatus, getReports } from "@/lib/api";
 import { ReportData, ReportStatus } from "@/types";
 import { Card, CardContent, Button } from "@/components/ui/basic";
 import { Badge } from "@/components/ui/badge";
@@ -49,12 +49,13 @@ export default function ReportsPage() {
     const loadReports = async () => {
         setLoading(true);
         try {
-            const dataStr = localStorage.getItem("openrad_reports");
-            const data = dataStr ? JSON.parse(dataStr) : [];
-            console.log("Local Reports loaded:", data?.length || 0, "reports");
+            // Use getReports() which merges Supabase (real UUIDs) + localStorage
+            // This ensures we pass real UUIDs to updateReportStatus so Supabase gets updated
+            const data = await getReports();
+            console.log("Reports loaded:", data?.length || 0, "reports");
             setReports(data || []);
         } catch (e) {
-            console.error("Error parsing local reports", e);
+            console.error("Error loading reports", e);
             setReports([]);
         }
         setLoading(false);
