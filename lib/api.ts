@@ -306,7 +306,8 @@ export async function getReports() {
 
 export async function updateReportData(id: string, updates: Partial<ReportData>) {
     const supabase = getSupabaseClient();
-    if (!supabase) return false;
+    // Skip Supabase for local-only reports
+    if (!supabase || id.startsWith('local_')) return false;
 
     const { data: current, error: fetchError } = await supabase
         .from('reports')
@@ -337,7 +338,10 @@ export async function updateReportStatus(
     let updatedData: any = null;
     let supabaseSuccess = false;
 
-    if (supabase) {
+    // Only attempt Supabase if we have a real UUID (not a local_ id)
+    const isLocalReport = id.startsWith('local_');
+
+    if (supabase && !isLocalReport) {
         // 1. Fetch current report data to preserve other fields
         const { data: current, error: fetchError } = await supabase
             .from('reports')
@@ -431,9 +435,9 @@ export async function updateReportStatus(
     }
 
 
-    // 2. Update the record in Supabase (if we have a client and success initially)
+    // 2. Update the record in Supabase (if we have a client and a real UUID)
     let supabaseError = null;
-    if (supabase && updatedData) {
+    if (supabase && !isLocalReport && updatedData) {
         const { error } = await supabase
             .from('reports')
             .update({
