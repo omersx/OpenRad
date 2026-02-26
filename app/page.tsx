@@ -40,9 +40,9 @@ export default function Home() {
         } catch (e) { /* ignore */ }
       }
 
-      // Simulate a delay for better UX only if using mock data
       if (!hasWebhook) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        alert("Please enter your n8n webhook URL in Settings to generate a report.");
+        return;
       }
 
       const reports = await generateReport(data);

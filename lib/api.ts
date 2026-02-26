@@ -27,29 +27,8 @@ export async function generateReport(data: PatientContext): Promise<ReportData[]
     }
 
     if (!webhookUrl) {
-        console.warn("[OpenRad] No webhook URL configured. Returning mock data. Set the n8n Webhook URL in Settings.");
-
-        // Convert image to base64 if provided for mock reports too
-        let imageBase64: string | null = null;
-        if (data.image) {
-            imageBase64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(data.image as File);
-            });
-        }
-
-        const mockReports = mockReportResponse(data);
-
-        // Attach image data to mock report
-        if (mockReports.length > 0 && imageBase64) {
-            mockReports[0].image_data = imageBase64;
-        }
-
-        // Save mock report for history testing
-        await saveReport(mockReports[0]);
-        return mockReports;
+        console.error("[OpenRad] No webhook URL configured. Set the n8n Webhook URL in Settings.");
+        throw new Error("No webhook URL configured. Please enter your n8n webhook URL in Settings.");
     }
 
     try {
