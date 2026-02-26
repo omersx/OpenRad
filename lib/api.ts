@@ -233,6 +233,7 @@ export async function saveReport(report: ReportData) {
             patient_name: report.patient.name,
             modality: report.study.examination,
             urgency: report.urgency,
+            report_status: report.report_footer?.report_status || 'Pending',
             report_data: report,
             created_at: new Date().toISOString()
         }).select();
@@ -442,6 +443,7 @@ export async function updateReportStatus(
             .from('reports')
             .update({
                 report_data: updatedData,
+                report_status: status,   // also update the top-level column
             })
             .eq('id', id);
 

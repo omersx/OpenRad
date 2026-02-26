@@ -5,6 +5,7 @@ create table public.reports (
   patient_name text,
   modality text,
   urgency text,
+  report_status text default 'Pending',
   report_data jsonb not null
 );
 
@@ -15,3 +16,9 @@ alter table public.reports enable row level security;
 -- In production, you'd want authenticated users only
 create policy "Enable all access for all users" on public.reports
 for all using (true) with check (true);
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: run this if the table already exists and you need to add the column
+-- ─────────────────────────────────────────────────────────────────────────────
+-- alter table public.reports add column if not exists report_status text default 'Pending';
