@@ -87,6 +87,38 @@ All configurations can be done directly from the app's **Settings UI**:
 - **Supabase Credentials**: Enter your project URL and Anon Key to activate Cloud History and User Management features.
 - All configurations entered are securely saved locally to your browser and not tracked by source control.
 
+## 🗄️ Supabase Database Setup (Optional Cloud Sync)
+
+If you want to enable Cloud Sync across devices, you need to configure a Supabase project and create the necessary database table.
+
+1. Go to [Supabase](https://supabase.com/) and create a new project.
+2. Navigate to the **SQL Editor** in your Supabase dashboard.
+3. **Copy and paste** the following SQL code and click **Run**:
+
+```sql
+-- Create the reports table
+create table public.reports (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  patient_name text,
+  modality text,
+  urgency text,
+  report_status text default 'Pending',
+  report_data jsonb not null
+);
+
+-- Enable Row Level Security (RLS)
+alter table public.reports enable row level security;
+
+-- Create a policy that allows anyone to insert/select/update
+-- (Note: For a production app, you should restrict this to authenticated users)
+create policy "Enable all access for all users" on public.reports
+for all using (true) with check (true);
+```
+
+4. Go to **Project Settings** -> **API** and copy your **Project URL** and **anon public key**.
+5. Paste these into the OpenRad **Settings** page in your browser to connect your app!
+
 ## 🤝 Contributing
 
 Contributions are heavily encouraged! To contribute:
