@@ -439,18 +439,44 @@ export async function updateReportStatus(
     // 2. Update the record in Supabase (if we have a client and a real UUID)
     let supabaseError = null;
     if (supabase && !isLocalReport && updatedData) {
-        const { error } = await supabase
+        // Try update with top-level report_status column first
+        const { error: err1 } = await supabase
             .from('reports')
             .update({
                 report_data: updatedData,
-                report_status: status,   // also update the top-level column
+                report_status: status,
             })
             .eq('id', id);
 
-        supabaseError = error;
+        if (err1) {
+            // Log full error details
+            console.warn("[OpenRad] Supabase update with report_status failed:", {
+                message: err1.message,
+                code: err1.code,
+                details: err1.details,
+                hint: err1.hint,
+            });
+            console.warn("[OpenRad] Retrying without report_status column (column may not exist yet)...");
 
-        if (error) {
-            console.error("Error updating report status in Supabase:", error);
+            // Fallback: retry updating only report_data (works even if report_status column doesn't exist)
+            const { error: err2 } = await supabase
+                .from('reports')
+                .update({ report_data: updatedData })
+                .eq('id', id);
+
+            supabaseError = err2;
+            if (err2) {
+                console.error("[OpenRad] Supabase fallback update also failed:", {
+                    message: err2.message,
+                    code: err2.code,
+                    details: err2.details,
+                    hint: err2.hint,
+                });
+            } else {
+                console.log("[OpenRad] Fallback update succeeded (report_data updated, but report_status column may be missing — run the migration SQL).");
+            }
+        } else {
+            console.log("[OpenRad] Supabase report status updated successfully:", status);
         }
     }
 
